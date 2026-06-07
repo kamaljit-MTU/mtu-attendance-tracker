@@ -11,13 +11,17 @@
   <link rel="stylesheet" href="css/styles.css" />
 
   <!-- Vercel Web Analytics (only loaded when the site is served from Vercel;
-       the script lives at /_vercel/insights/script.js and 404s elsewhere) -->
+       the script lives at /_vercel/insights/script.js and 404s elsewhere,
+       so we only inject the tag on .vercel.app) -->
   <script>
     if (location.hostname.endsWith('.vercel.app')) {
       window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+      var s = document.createElement('script');
+      s.defer = true;
+      s.src = '/_vercel/insights/script.js';
+      document.head.appendChild(s);
     }
   </script>
-  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <!-- Decorative background layers (tech images, low opacity) -->
