@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MTU Attendance Tracker</title>
+  <link rel="icon" type="image/png" href="assets/mtu-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+
+  <!-- Vercel Web Analytics (only loaded when the site is served from Vercel;
+       the script lives at /_vercel/insights/script.js and 404s elsewhere) -->
+  <script>
+    if (location.hostname.endsWith('.vercel.app')) {
+      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    }
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+  <!-- Decorative background layers (tech images, low opacity) -->
+  <div class="bg-layer" aria-hidden="true">
+    <div class="bg-image bg-image-1"></div>
+    <div class="bg-image bg-image-2"></div>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+  </div>
+
+  <!-- Top banner -->
+  <header class="top-banner" role="banner">
+    <div class="banner-inner">
+      <div class="banner-brand">
+        <img src="assets/mtu-logo.png" alt="Manipur Technical University logo" class="banner-logo" />
+        <div class="banner-text">
+          <h1 class="banner-title">Manipur Technical University</h1>
+          <p class="banner-subtitle">Smart Attendance Tracker &middot; Geofenced &middot; Time-bound</p>
+        </div>
+      </div>
+      <nav class="banner-nav" aria-label="Primary">
+        <a href="#/" data-route="home" class="nav-link active">Home</a>
+        <a href="#/instructor" data-route="instructor" class="nav-link">Instructor</a>
+        <a href="#/student" data-route="student" class="nav-link">Student</a>
+        <a href="#/reports" data-route="reports" class="nav-link hidden" id="reportsNavLink">Reports</a>
+        <a href="#/my-report" data-route="my-report" class="nav-link hidden" id="myReportNavLink">My Report</a>
+        <a href="#/profile" data-route="profile" class="nav-link hidden" id="profileNavLink">Profile</a>
+        <button id="logoutBtn" class="btn btn-ghost btn-sm hidden" type="button">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="app" class="app-main"></main>
+
+  <footer class="site-footer">
+    <p>&copy; <span id="year"></span> Manipur Technical University &middot</p>
+	<p> Rajkumar Kamaljit Singh, PhD</p>
+  </footer>
+
+  <!-- Toast container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- Modal container -->
+  <div id="modalRoot"></div>
+
+  <!-- Templates -->
+  <template id="tpl-home">
+    <section class="hero">
+      <div class="hero-content">
+        <span class="eyebrow">MTU &middot; Attendance Tracker</span>
+        <h2 class="hero-title">A modern attendance system with <span class="grad-text">geofencing</span> and <span class="grad-text-2">time-bound</span> check-ins.</h2>
+        <p class="hero-sub">Instructors create classes, set locations and timings, then share a link. Students enroll with one click and mark attendance from inside the campus, on time.</p>
+        <div class="hero-actions">
+          <a href="#/instructor" class="btn btn-primary">I'm an Instructor</a>
+          <a href="#/student" class="btn btn-secondary">I'm a Student</a>
+        </div>
+        <ul class="hero-features">
+          <li><span class="feat-dot"></span> GPS-verified geofence</li>
+          <li><span class="feat-dot"></span> Class schedule windows</li>
+          <li><span class="feat-dot"></span> One-tap enrollment via link</li>
+        </ul>
+      </div>
+      <div class="hero-card">
+        <div class="hero-card-header">
+          <div class="dot dot-r"></div>
+          <div class="dot dot-y"></div>
+          <div class="dot dot-g"></div>
+          <span class="hero-card-title">mtu-attendance.app</span>
+        </div>
+        <div class="hero-card-body">
+          <div class="row">
+            <span class="label">Class</span>
+            <span class="value">B.Tech CSE &mdash; Data Structures</span>
+          </div>
+          <div class="row">
+            <span class="label">Time</span>
+            <span class="value">Mon &middot; 09:00&ndash;10:00</span>
+          </div>
+          <div class="row">
+            <span class="label">Geofence</span>
+            <span class="value">Block A &middot; 80 m radius</span>
+          </div>
+          <div class="row">
+            <span class="label">Status</span>
+            <span class="value status-ok">Inside fence &middot; On time</span>
+          </div>
+          <button class="btn btn-primary btn-block" type="button" disabled>Mark Attendance</button>
+          <p class="muted small">Demo preview &mdash; real check-in uses your live GPS.</p>
+        </div>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-auth">
+    <section class="auth-wrap">
+      <div class="auth-card">
+        <h2 class="auth-title" data-bind="title">Sign in</h2>
+        <p class="auth-sub" data-bind="subtitle">Use your MTU credentials (demo &mdash; stored locally).</p>
+        <form id="authForm" class="auth-form" autocomplete="off">
+          <div class="field">
+            <label for="authName">Full name</label>
+            <input id="authName" name="name" type="text" placeholder="e.g. Dr. R. Singh" />
+          </div>
+          <div class="field">
+            <label for="authEmail">MTU email</label>
+            <input id="authEmail" name="email" type="email" required placeholder="you@mtu.ac.in" />
+          </div>
+          <div class="field" id="pwField">
+            <label for="authPassword" data-bind="pwLabel">Password</label>
+            <input id="authPassword" name="password" type="password" required minlength="6" placeholder="At least 6 characters" autocomplete="current-password" />
+            <button id="authForgot" type="button" class="link-btn hidden">Forgot password?</button>
+          </div>
+          <div class="field">
+            <label for="authRole">Role</label>
+            <select id="authRole" name="role" required>
+              <option value="instructor">Instructor</option>
+              <option value="student">Student</option>
+            </select>
+          </div>
+          <div class="field hidden" id="rollNoField">
+            <label for="authRoll">Roll number</label>
+            <input id="authRoll" name="roll" type="text" placeholder="e.g. MTU2024CSE042" />
+          </div>
+          <button id="authSubmit" type="submit" class="btn btn-primary btn-block">Sign in</button>
+          <p id="authError" class="auth-error small center hidden" role="alert"></p>
+          <button id="authToggleMode" type="button" class="btn btn-ghost btn-sm btn-block">New here? Create an account</button>
+          <p class="muted small center">Accounts are created on first sign-in. Data is shared across devices in real time.</p>
+        </form>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-instructor">
+    <section class="dashboard">
+      <header class="dash-head">
+        <div>
+          <h2 class="dash-title">Instructor Dashboard</h2>
+          <p class="dash-sub">Welcome, <span data-bind="userName"></span></p>
+        </div>
+        <div class="dash-actions">
+          <button id="newClassBtn" class="btn btn-primary" type="button">+ New Class</button>
+        </div>
+      </header>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">Classes</span>
+          <span class="stat-value" data-bind="classCount">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Enrolled students</span>
+          <span class="stat-value" data-bind="studentCount">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Sessions today</span>
+          <span class="stat-value" data-bind="todayCount">0</span>
+        </div>
+      </div>
+
+      <h3 class="section-title">Your Classes</h3>
+      <div id="classList" class="class-grid"></div>
+      <p id="classEmpty" class="empty-state hidden">No classes yet. Click <strong>New Class</strong> to create one.</p>
+    </section>
+  </template>
+
+  <template id="tpl-student">
+    <section class="dashboard">
+      <header class="dash-head">
+        <div>
+          <h2 class="dash-title">Student Dashboard</h2>
+          <p class="dash-sub">Welcome, <span data-bind="userName"></span></p>
+        </div>
+        <div class="dash-actions">
+          <a id="myReportBtn" class="btn btn-secondary" href="#/my-report">My Report</a>
+          <button id="enrollBtn" class="btn btn-primary" type="button">Enroll via link/code</button>
+        </div>
+      </header>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-label">Enrolled classes</span>
+          <span class="stat-value" data-bind="enrolledCount">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Present (lifetime)</span>
+          <span class="stat-value" data-bind="presentCount">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Attendance %</span>
+          <span class="stat-value" data-bind="attendancePct">0%</span>
+        </div>
+      </div>
+
+      <h3 class="section-title">Live Class Status</h3>
+      <div id="liveClassList" class="class-grid"></div>
+      <p id="liveEmpty" class="empty-state hidden">You are not enrolled in any class. Use <strong>Enroll via link/code</strong> to join one.</p>
+
+      <h3 class="section-title">My Attendance History</h3>
+      <div id="historyList" class="history-list"></div>
+      <p id="historyEmpty" class="empty-state hidden">No attendance records yet.</p>
+    </section>
+  </template>
+
+  <template id="tpl-class-card">
+    <article class="class-card" data-bind="id">
+      <div class="class-card-top">
+        <div>
+          <h4 class="class-name" data-bind="name">Class name</h4>
+          <p class="class-code" data-bind="code">CODE</p>
+        </div>
+        <span class="badge" data-bind="statusBadge">Active</span>
+      </div>
+      <p class="class-desc" data-bind="description"></p>
+      <ul class="class-meta">
+        <li><span>Dates</span><strong data-bind="dates">—</strong></li>
+        <li><span>Geofence</span><strong data-bind="geo">-</strong></li>
+        <li><span>Slots</span><strong data-bind="slots">-</strong></li>
+        <li><span>Enrolled</span><strong data-bind="enrolled">0</strong></li>
+      </ul>
+      <div class="roster" data-bind="roster"></div>
+      <div class="class-actions" data-bind="actions"></div>
+    </article>
+  </template>
+
+  <template id="tpl-reports">
+    <section class="dashboard reports-page">
+      <header class="dash-head">
+        <div>
+          <h2 class="dash-title">Monthly Attendance</h2>
+          <p class="dash-sub" data-bind="subtitle">Pick a class and a month to see the full sheet.</p>
+        </div>
+        <div class="dash-actions">
+          <a href="#/instructor" class="btn btn-ghost btn-sm">&larr; Back</a>
+        </div>
+      </header>
+
+      <div class="reports-controls">
+        <div class="field">
+          <label for="reportsClass">Class</label>
+          <select id="reportsClass"></select>
+        </div>
+        <div class="field">
+          <label for="reportsMonth">Month</label>
+          <input id="reportsMonth" type="month" />
+        </div>
+        <div class="field reports-export" data-bind="export">
+          <label>Export</label>
+          <div class="export-buttons">
+            <button type="button" class="btn btn-ghost btn-sm" data-export="csv">&darr; CSV</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-export="xlsx">&darr; XLSX</button>
+          </div>
+        </div>
+        <div class="field reports-summary" data-bind="summary"></div>
+      </div>
+
+      <div class="reports-table-wrap" data-bind="tableWrap">
+        <p class="muted small">Loading…</p>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-my-report">
+    <section class="dashboard reports-page">
+      <header class="dash-head">
+        <div>
+          <h2 class="dash-title">My Attendance</h2>
+          <p class="dash-sub" data-bind="subtitle">Your personal attendance, month by month.</p>
+        </div>
+        <div class="dash-actions">
+          <a href="#/student" class="btn btn-ghost btn-sm">&larr; Back</a>
+        </div>
+      </header>
+
+      <div class="reports-controls">
+        <div class="field">
+          <label for="myReportMonth">Month</label>
+          <input id="myReportMonth" type="month" />
+        </div>
+        <div class="field reports-export" data-bind="export">
+          <label>Export</label>
+          <div class="export-buttons">
+            <button type="button" class="btn btn-ghost btn-sm" data-export="csv">&darr; CSV</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-export="xlsx">&darr; XLSX</button>
+          </div>
+        </div>
+        <div class="field reports-summary" data-bind="summary"></div>
+      </div>
+
+      <div class="reports-table-wrap" data-bind="tableWrap">
+        <p class="muted small">Loading…</p>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-profile">
+    <section class="dashboard profile-page">
+      <header class="dash-head">
+        <div>
+          <h2 class="dash-title">My Profile</h2>
+          <p class="dash-sub">Manage your account details and password.</p>
+        </div>
+      </header>
+
+      <div class="profile-grid">
+        <section class="profile-card">
+          <h3 class="section-title">Personal information</h3>
+          <form id="profileForm" class="auth-form" autocomplete="off">
+            <div class="field">
+              <label for="profileName">Full name</label>
+              <input id="profileName" name="name" type="text" required placeholder="Your full name" />
+            </div>
+            <div class="field" id="profileRollField">
+              <label for="profileRoll">Roll number</label>
+              <input id="profileRoll" name="roll" type="text" placeholder="e.g. MTU2024CSE042" />
+            </div>
+            <div class="field">
+              <label>Email</label>
+              <input id="profileEmail" type="email" disabled />
+            </div>
+            <div class="field">
+              <label>Role</label>
+              <input id="profileRole" type="text" disabled />
+            </div>
+            <div class="field">
+              <label>Member since</label>
+              <input id="profileJoined" type="text" disabled />
+            </div>
+            <p id="profileError" class="auth-error small hidden" role="alert"></p>
+            <p id="profileOk" class="auth-ok small hidden" role="status"></p>
+            <div class="profile-actions">
+              <button type="submit" class="btn btn-primary">Save changes</button>
+            </div>
+          </form>
+          <p class="muted small">Email and role are fixed after registration. Contact an admin if they need to change.</p>
+        </section>
+
+        <section class="profile-card">
+          <h3 class="section-title">Security</h3>
+          <form id="passwordForm" class="auth-form" autocomplete="off">
+            <div class="field">
+              <label for="pwCurrent">Current password</label>
+              <input id="pwCurrent" name="current" type="password" required autocomplete="current-password" placeholder="Required to confirm it's you" />
+            </div>
+            <div class="field">
+              <label for="pwNew">New password</label>
+              <input id="pwNew" name="new" type="password" required minlength="6" autocomplete="new-password" placeholder="At least 6 characters" />
+            </div>
+            <div class="field">
+              <label for="pwConfirm">Confirm new password</label>
+              <input id="pwConfirm" name="confirm" type="password" required minlength="6" autocomplete="new-password" placeholder="Type the new password again" />
+            </div>
+            <p id="passwordError" class="auth-error small hidden" role="alert"></p>
+            <p id="passwordOk" class="auth-ok small hidden" role="status"></p>
+            <div class="profile-actions">
+              <button type="submit" class="btn btn-primary">Change password</button>
+            </div>
+          </form>
+          <p class="muted small">For security, Firebase may ask you to re-enter your current password to confirm the change.</p>
+        </section>
+      </div>
+    </section>
+  </template>
+
+  <!-- Firebase SDK (compat, no build step) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+
+  <!-- JS modules (order matters) -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/fb.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/geofence.js"></script>
+  <script src="js/selfie.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/instructor.js"></script>
+  <script src="js/student.js"></script>
+  <script src="js/profile.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="js/reports.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

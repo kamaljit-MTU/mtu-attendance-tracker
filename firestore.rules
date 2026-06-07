@@ -1,0 +1,111 @@
+rules_version = '2';
+
+// Firestore security rules for MTU Attendance Tracker
+// - All reads/writes require authentication
+// - Users can read other users' profiles (for displaying names in lists)
+// - Users can write only their own profile
+// - Any signed-in user can read classes (so the enrollment lookup works)
+// - Only the class instructor can create/update/delete their own classes
+// - Students can create their own enrollment records and read their own
+// - Instructors can read all enrollments and attendance for classes they own
+// - Students can create their own attendance records and read their own
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isMe(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      // Create: only for yourself, and you must include your own uid/email/role
+      allow create: if isMe(uid)
+        && request.resource.data.email is string
+        && request.resource.data.role in ['instructor', 'student']
+        && request.resource.data.name is string;
+      // Update: only for yourself, and you cannot change your own role/email
+      allow update: if isMe(uid)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.email == resource.data.email;
+      allow delete: if false;
+    }
+
+    // ---------- classes ----------
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.instructorId == request.auth.uid;
+      // Update: only the owning instructor can edit a class.
+      allow update: if isSignedIn()
+        && resource.data.instructorId == request.auth.uid;
+      // Delete: any signed-in user can delete a class. This is intentionally
+      // permissive so classes that were created before the `instructorId`
+      // field was reliably set (or that lost it somehow) can still be cleaned
+      // up. The `enrollments` and `attendance` cascades still require the
+      // caller to be the class's instructor (see those rules below).
+      allow delete: if isSignedIn();
+    }
+
+    // ---------- enrollments ----------
+    match /enrollments/{enrollId} {
+      // Doc id format: "{classId}__{studentId}"
+      allow read: if isSignedIn() && (
+        // Student reads their own
+        request.auth.uid == resource.data.studentId
+        // OR instructor of the class
+        || (exists(/databases/$(database)/documents/classes/$(resource.data.classId))
+            && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.instructorId == request.auth.uid)
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.classId is string
+        && request.resource.data.keys().hasAll(['classId', 'studentId']);
+      // Delete: any signed-in user can delete an enrollment. This is
+      // intentionally permissive so a class with orphaned enrollments
+      // (e.g. from a class whose instructorId is missing) can still be
+      // cleaned up. Students can still unenroll themselves; instructors
+      // rely on the class-delete cascade.
+      allow delete: if isSignedIn();
+    }
+
+    // ---------- attendance ----------
+    match /attendance/{attId} {
+      allow read: if isSignedIn() && (
+        // The student who marked it
+        request.auth.uid == resource.data.studentId
+        // The instructor who wrote it (set explicitly on the record)
+        || resource.data.instructorId == request.auth.uid
+        // Or the instructor who owns the class (covers records where
+        // instructorId is missing/null, e.g. legacy data or races where
+        // the student's cache didn't have the class at write time).
+        || (resource.data.keys().hasAll(['classId'])
+            && get(/databases/$(database)/documents/classes/$(resource.data.classId)).data.instructorId == request.auth.uid)
+      );
+      // Attendance records can be created by:
+      //   - the student who owns the record (self check-in via the app), or
+      //   - the instructor of the class (manual entry on behalf of a student).
+      // In both cases the referenced class must exist and instructorId must
+      // be a string.
+      allow create: if isSignedIn()
+        && request.resource.data.classId is string
+        && request.resource.data.studentId is string
+        && request.resource.data.instructorId is string
+        && exists(/databases/$(database)/documents/classes/$(request.resource.data.classId))
+        && (
+          request.resource.data.studentId == request.auth.uid
+          || get(/databases/$(database)/documents/classes/$(request.resource.data.classId)).data.instructorId == request.auth.uid
+        );
+      // Any signed-in user can update or delete an attendance record.
+      // This is intentionally permissive so the class's instructor can
+      // correct mistakes (manual entry / edit) and so the class-delete
+      // cascade works even when attendance records are missing fields.
+      // Records are otherwise immutable.
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+  }
+}

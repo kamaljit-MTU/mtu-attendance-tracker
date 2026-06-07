@@ -1,0 +1,16 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firebase-debug.log",
+      "firestore.rules",
+      "vercel.json",
+      "README.md",
+      "**/.*"
+    ]
+  }
+}

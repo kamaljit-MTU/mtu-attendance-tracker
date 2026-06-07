@@ -1,0 +1,12 @@
+# Tooling caches
+.vercel
+node_modules/
+
+# Unrelated sub-project (a separate agentic-tool plugin, not part of MTU Attendance Tracker)
+caveman/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
