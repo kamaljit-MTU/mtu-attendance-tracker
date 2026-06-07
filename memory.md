@@ -62,27 +62,33 @@
 - `recidx` includes the date (not just slotKey) so a single record for one Saturday doesn't match every Saturday in the month.
 - Selfie preservation: `upsert({ ..., clearSelfie: true })` opts in to clearing; default preserves. Manual entry modal will not pass `selfie` at all so the existing one survives.
 - Manual entry modal does a direct Firestore fetch for enrollments + user profiles (`Storage.Enroll.forClass` and `Storage.Users.findById` can lag the cache).
+- **Course date window**: `startDate` / `endDate` are stored as `'YYYY-MM-DD'` strings (null when unset). Reports and student lifetime % both filter sessions to the window via `Utils.inDateRange`. The class modal's date inputs are always optional and can be added/edited later via the same Edit form.
+- **Profile persistence hardening**: `Storage.Users.ensureProfile` re-reads the canonical Firestore doc after writing so the local cache always reflects the server (and `updatedAt` resolves to a real number, not a `FieldValue` sentinel). `notify()` triggers `Storage.onChange(render)` for instant UI updates.
 
 ## Next Steps
-1. Replace the student `<select>` in `openManualEntryModal` with a `<input list="...">` + `<datalist>`. Pre-fill with the existing student's name when editing. On save, match the typed name against `enrolled` (by name) first, then `db.collection('users').where('name','==',typed).limit(1)`. If neither matches, show error.
-2. Make sure the manual entry submit doesn't pass `selfie` so the existing selfie is preserved via the new `upsert` logic.
-3. Deploy and test: open Edit on an existing record — selfie thumb should remain; change the name to a non-enrolled student's name and try saving (should fall back to Firestore `users` lookup).
-4. Continue iterating on reports, profile, and any other UI polish.
+1. **GitHub Pages**: User must enable Pages in repo Settings → Pages → main / root. Add `kamaljit-MTU.github.io` to Firebase Auth's authorized domains. (Both documented in the README's "Deploy to GitHub Pages" section.)
+2. Replace the student `<select>` in `openManualEntryModal` with a `<input list="...">` + `<datalist>`. Pre-fill with the existing student's name when editing. On save, match the typed name against `enrolled` (by name) first, then `db.collection('users').where('name','==',typed).limit(1)`. If neither matches, show error.
+3. Make sure the manual entry submit doesn't pass `selfie` so the existing selfie is preserved via the new `upsert` logic.
+4. Deploy and test: open Edit on an existing record — selfie thumb should remain; change the name to a non-enrolled student's name and try saving (should fall back to Firestore `users` lookup).
+5. Continue iterating on reports, profile, and any other UI polish.
 
 ## Critical Context
-- Deployed URL: `https://mtu-attendance-tracker.vercel.app` (alias).
+- Deployed URL (Vercel): `https://mtu-attendance-tracker.vercel.app` (alias).
+- Deployed URL (GitHub Pages, once enabled): `https://kamaljit-MTU.github.io/mtu-attendance-tracker/`.
+- GitHub repo: `https://github.com/kamaljit-MTU/mtu-attendance-tracker`. Local git identity: Rajkumar Kamaljit Singh / [email protected] (set as repo-local config — not global). Two commits on `main`: `db44f69` and `7c8975d`. Force-pushed because the old remote had strictly older content.
 - Firebase project: `mtu-attendance-tracker`; auth domain `mtu-attendance-tracker.firebaseapp.com`.
 - Vercel CLI v54.9.1; logged in as `kamaljit-rk-5451`.
 - `firebase.json` points `firestore.rules` to `firestore.rules`; `firebase deploy --only firestore:rules --project mtu-attendance-tracker` works.
 - `window.fb` API surface: `signUp`, `signIn`, `signOut`, `resetPassword`, `updatePassword`, `reauthenticate`, `onAuthChange`, `currentUser`, `db`, `needsConfig`, `ready`.
 - `Storage` API: `Storage.Session.current()`, `Storage.Users.{findById, ensureProfile, all, cache}`, `Storage.Classes.{all, findById, byInstructor, create, update, remove, countEnrolled, findByEnrollCode}`, `Storage.Enroll.{forClass, forStudent, isEnrolled, enroll, unenroll}`, `Storage.Attend.{forClass, forStudent, record, findOne, upsert, remove}`, `Storage.uid`, `Storage.code`, `Storage.onChange`.
 - `Storage.init(user)` sets `isReady = true` after first `userRef.get()`; instructor subscribes to `classes` then dynamically to `enrollments` in chunks of 30; attendance subscription hydrates user profiles.
-- Class docs schema: `{name, code, description, geofence:{lat,lng,radiusM}, timeSlots:[{day,start,end}], instructorId, enrollCode, createdAt}`.
+- Class docs schema: `{name, code, description, geofence:{lat,lng,radiusM}, timeSlots:[{day,start,end}], startDate, endDate, instructorId, enrollCode, createdAt}`. `startDate` / `endDate` are `'YYYY-MM-DD'` strings or null.
 - Attendance doc schema: `{classId, studentId, instructorId, slot, slotKey, location, selfieData, status, timestamp}`.
 - `Utils.DAY_ORDER = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']`.
 - `Utils.slotKey(slot)` exists and is used in `Storage.Attend.record` and `Storage.Attend.upsert`.
+- `Utils.normalizeDateStr(v)`, `Utils.fmtDateStr(s)`, `Utils.inDateRange(d, startStr, endStr)` are the date-window helpers.
 - PowerShell alias issue: `curl` resolves to `Invoke-WebRequest`; must use `curl.exe` for raw flags like `-sS -w`.
-- `tpl-class-card` data-bind targets: `id, name, code, description, geo, slots, enrolled, statusBadge, actions, roster`.
+- `tpl-class-card` data-bind targets: `id, name, code, description, geo, slots, enrolled, dates, statusBadge, actions, roster`. New `dates` row is hidden when neither start nor end is set.
 - `tpl-profile` form IDs: `profileName, profileRoll, profileEmail, profileRole, profileJoined, profileError, profileOk, pwCurrent, pwNew, pwConfirm, passwordError, passwordOk`.
 - Auth card IDs: `authName, authEmail, authPassword, authForgot, authRole, authRoll, authError, authToggleMode, authSubmit`.
 
@@ -111,4 +117,8 @@ ode -c, redeployed to mtu-attendance-tracker.vercel.app.
 - **Task 1 — Persistent full name (profile).** The name is already saved to Firestore at `users/{uid}` (the authoritative store), so it survives sign-out / sign-in / device change. Hardened `Storage.Users.ensureProfile` (`js/storage.js`) to **re-read the canonical doc after writing** instead of trusting the local write: this means the local `cache.me` always reflects the server, `updatedAt` resolves to a real number, and missing server-computed fields (like `createdAt`) are recovered. `notify()` still fires, so `Storage.onChange(render)` in `app.js` re-renders the dashboard with the new name immediately. Verified all touched files pass `node --check`.
 - **Task 2 — Course start & end dates (with late entry).** Added optional `startDate` and `endDate` (`'YYYY-MM-DD'` strings) to the class doc schema. `Storage.Classes.create` / `update` (`js/storage.js`) normalize via `Utils.normalizeDateStr`; `Classes.update` patches the fields even when omitted (so a partial update won't wipe them). The instructor class modal (`js/instructor.js` `openClassModal`) has two new date inputs; both can be left blank and filled in later via the same Edit modal. The class card template (`index.html` `tpl-class-card`) shows the range as a new `data-bind="dates"` row, hidden when neither date is set. Reports (`js/reports.js` `sessionsInMonth`) now skip sessions outside `[startDate, endDate]` when generating month columns, and the report header shows the period. Student dashboard stats (`js/student.js` `refresh`) compute the lifetime % as `present / expected`, where `expected` is the count of past recurring slots in the class window (via new `expandSlotsToDates` helper). New `Utils.{normalizeDateStr,fmtDateStr,inDateRange}` added.
 - **Task 3 — Where credentials are stored.** Documented in the response (next bullet) and in the README schema comments.
-- **Task 4 — GitHub Pages.** Not deployed yet; needs the GitHub repo URL (the `gh` CLI is not installed). A static-site workflow is ready to commit.
+- **Task 4 — GitHub Pages.** Deployed. GitHub repo: `https://github.com/kamaljit-MTU/mtu-attendance-tracker`. Pages URL (once enabled in repo Settings → Pages → main / root): `https://kamaljit-MTU.github.io/mtu-attendance-tracker/`. The local git repo was initialized in this folder with two commits (no git identity was configured globally, so a local `user.name` / `user.email` was set: "Rajkumar Kamaljit Singh" / "[email protected]"). Initial push was rejected (remote had strictly older content — no `js/profile.js`, no `js/reports.js`, older `firestore.rules`, etc.), so `git push --force-with-lease origin main` was used. Commits: `db44f69` (the four-task work) and `7c8975d` (skip Vercel analytics on non-Vercel hosts). `.gitignore` now also excludes `caveman/` and `node_modules/`. README has a "Deploy to GitHub Pages" section.
+  - **Remaining manual steps for the user** (not done by us):
+    1. GitHub repo → Settings → Pages → Source: "Deploy from a branch" → Branch: `main` / `(root)` → Save.
+    2. Firebase console → project `mtu-attendance-tracker` → Authentication → Settings → Authorized domains → Add `kamaljit-MTU.github.io` (without this, sign-in on the Pages URL returns `auth/unauthorized-domain`).
+  - **Where credentials live (summary)**: email+password → Firebase Auth (Google-managed, server-side, hashed). User profile (`name`, `email`, `role`, `rollNo`, `createdAt`, `updatedAt`) → Firestore `users/{uid}`. Classes/enrollments/attendance → Firestore. Selfies → inline in `attendance/{id}.selfieData` (no Firebase Storage). **No `localStorage` or `sessionStorage` is used anywhere in the JS** (verified by grep). The `firebase-config.js` "API key" is a public web key, safe to publish; real security lives in `firestore.rules` and Firebase Auth's authorized-domains list.
